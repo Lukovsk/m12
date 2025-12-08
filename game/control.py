@@ -1,127 +1,330 @@
-import random
-from serial import Serial
-import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
+import serial
+import threading
 import time
+import random
 
-# ---------------------------
-# CONFIGURAÇÃO DA SERIAL
-# ---------------------------
-PORTA = "COM6"
+# =============================================================================
+# CONFIGURAÇÕES
+# =============================================================================
+PORTA = "COM6"  # Ajuste para a sua porta
 BAUD = 9600
 
-ser = Serial(PORTA, BAUD, timeout=0.1)
-time.sleep(2)  # Pico reinicia quando conecta
-MINUTE = 10
-HALF_MINUTE = MINUTE / 2
-
-root = tk.Tk()
-root.title("Controle do Raspberry Pi Pico W")
-led_states = [tk.IntVar() for _ in range(5)]
-LEDS = {}
-
-fRN = {0, 1, 2, 3}
-deads = [0, 0, 0, 0]
-period = 0
-witness = False
-
-# ---------------------------
-# FUNÇÃO PARA ENVIAR COMANDOS
-# ---------------------------
-def send(cmd):
-    ser.write((cmd + "\n").encode())
-
-def setup():
-    send("ALL_OFF")
-
-    random.shuffle(fRN)
-
-def kill(target: int):
-    if (target == 1 or target == 3):
-        deads[3] = 1
-    else:
-        deads[target] = 1
-
-def secure(target: int):
-    if target == 3:
-        deads[3] = 1
-    else:
-        deads[1] = 1
-    
-def testify(target: int):
-    if target in [0, 2]:
-        witness = True
-
-def dance():
-    send("DANCE")
-
-def restart():
-    for i in range(4):
-        deads[i] = 0
-        fRN[i] = i
-    period = 0
-    witness = False
-    setup()
-
-# ---------------------------
-# GUI
-# ---------------------------
+# Definição de Cores e Roles
+ROLES_DEF = ["VÍTIMA", "DETETIVE", "VÍTIMA", "ASSASSINO"]
+CORES = ["VERMELHO", "VERDE", "AMARELO", "AZUL"]  # LEDs 0, 1, 2, 3
+LED_BRANCO = 4
 
 
-frame_leds = ttk.LabelFrame(root, text="LEDs")
-frame_leds.pack(padx=10, pady=10, fill="x")
+# =============================================================================
+# CLASSE DO JOGO
+# =============================================================================
+class DetetiveGame:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Detetive - Controle Master")
+        self.root.geometry("600x500")
 
-for i in range(5):
-    cb = ttk.Checkbutton(frame_leds, text=f"LED {i+1}", variable=led_states[i], command=lambda i=i: send(f"LED{i}={led_states[i].get()}"))
-    cb.pack(anchor="w")
-
-ttk.Button(root, text="Ligar TODOS", command=lambda: send("ALL_ON")).pack(fill="x", padx=10)
-ttk.Button(root, text="Desligar TODOS", command=lambda: send("ALL_OFF")).pack(fill="x", padx=10, pady=(0, 10))
-
-
-# ---------------------------
-# ÁREA DE EVENTOS DOS BOTÕES
-# ---------------------------
-frame_log = ttk.LabelFrame(root, text="Eventos de Botões do Pico")
-frame_log.pack(padx=10, pady=10, fill="both", expand=True)
-
-log = tk.Text(frame_log, height=10)
-log.pack(fill="both", expand=True)
-
-
-# ---------------------------
-# THREAD PARA LER SERIAL
-# ---------------------------
-def serial_reader():
-    while True:
+        # Conexão Serial
         try:
-            data = ser.readline().decode().strip()
-            if data:
-                log.insert("end", data + "\n")
-                log.see("end")
+            self.ser = serial.Serial(PORTA, BAUD, timeout=0.1)
+            time.sleep(2)  # Espera Pico reiniciar
+            self.send("ALL_ON")
+            time.sleep(0.5)
+            self.send("ALL_OFF")
+            print(f"Conectado na {PORTA}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível conectar na {PORTA}\n{e}")
+            self.root.destroy()
+            return
 
-                if data == "BUTTON_PRESSED":
-                    send("LED4=1")
+        # Estado do Jogo
+        self.players = []  # Lista de dicionários com dados de cada player
+        self.actions_tonight = {}  # O que cada um fez na noite
+        self.turn_queue = []  # Quem falta jogar
+        self.current_player_idx = -1
+        self.game_phase = "SETUP"  # SETUP, WARNING, ACTION, PROCESSING, REVEAL, DAY
+        self.witness_info = ["", "", "", ""]
 
-            time.sleep(0.2)
-            period += 1
-            print(period)
+        # Elementos da GUI
+        self.setup_gui()
+
+        # Thread para ler o botão do Pico
+        self.running = True
+        self.thread = threading.Thread(target=self.serial_reader, daemon=True)
+        self.thread.start()
+
+    # --- COMUNICAÇÃO SERIAL ---
+    def send(self, cmd):
+        if self.ser and self.ser.is_open:
+            self.ser.write((cmd + "\n").encode())
+
+    def serial_reader(self):
+        while self.running:
+            try:
+                if self.ser and self.ser.is_open:
+                    line = self.ser.readline().decode().strip()
+                    if line == "BUTTON_PRESSED":
+                        # Usa after para chamar a função na thread principal da GUI
+                        self.root.after(0, self.on_physical_button_pressed)
+            except Exception as e:
+                print("Erro Serial:", e)
+            time.sleep(0.05)
+
+    # --- LÓGICA DE JOGO ---
+
+    def start_game(self):
+        # 1. Embaralhar Roles
+        shuffled_roles = list(ROLES_DEF)
+        random.shuffle(shuffled_roles)
+
+        self.players = []
+        for i in range(4):
+            self.players.append({"id": i, "color": CORES[i], "role": shuffled_roles[i], "alive": True})
+            # Liga o LED do jogador vivo
+            self.send(f"LED{i}=1")
+
+        self.send(f"LED{LED_BRANCO}=0")  # Apaga luz do dia (começa a noite)
+        self.lbl_status.config(text="JOGO INICIADO! A noite caiu.")
+        self.start_night_phase()
+
+    def start_night_phase(self):
+        self.actions_tonight = {}
+        self.witness_info = ["Nada aconteceu.", "Nada aconteceu.", "Nada aconteceu.", "Nada aconteceu."]
+
+        # Cria fila de quem está vivo para jogar
+        self.turn_queue = [p for p in self.players if p["alive"]]
+        self.next_turn()
+
+    def next_turn(self):
+        if len(self.turn_queue) == 0:
+            self.process_night_results()
+            return
+
+        player = self.turn_queue.pop(0)
+        self.current_player_idx = player["id"]
+
+        # Fase 1: Aviso para virar de costas
+        self.game_phase = "WARNING"
+        self.update_screen_warning(player)
+
+    def on_physical_button_pressed(self):
+        # Essa função é chamada quando o botão do Pico é apertado
+
+        if self.game_phase == "WARNING":
+            # Sai do aviso, mostra a tela de ação
+            self.game_phase = "ACTION"
+            self.update_screen_action()
+
+        elif self.game_phase == "ACTION":
+            # Jogador confirmou a ação (ou falta dela)
+            # A ação já deve ter sido salva pelos botões da tela
+            self.next_turn()
+
+        elif self.game_phase == "REVEAL_WARNING":
+            self.game_phase = "REVEAL_CONTENT"
+            self.update_screen_reveal_content()
+
+        elif self.game_phase == "REVEAL_CONTENT":
+            self.next_reveal()
+
+        elif self.game_phase == "DAY":
+            # Jogadores decidiram dormir
+            self.send(f"LED{LED_BRANCO}=0")  # Apaga luz branca
+            self.start_night_phase()
+
+    # --- GUI UPDATES ---
+
+    def setup_gui(self):
+        style = ttk.Style()
+        style.configure("Big.TLabel", font=("Helvetica", 18, "bold"))
+        style.configure("Huge.TLabel", font=("Helvetica", 24, "bold"), foreground="red")
+
+        self.main_frame = ttk.Frame(self.root, padding=20)
+        self.main_frame.pack(fill="both", expand=True)
+
+        self.lbl_title = ttk.Label(self.main_frame, text="DETETIVE IOT", style="Big.TLabel")
+        self.lbl_title.pack(pady=10)
+
+        self.lbl_instruction = ttk.Label(self.main_frame, text="Pressione Iniciar", font=("Helvetica", 14), wraplength=550)
+        self.lbl_instruction.pack(pady=20)
+
+        self.btn_area = ttk.Frame(self.main_frame)
+        self.btn_area.pack(pady=20)
+
+        self.lbl_status = ttk.Label(self.main_frame, text="Aguardando...", foreground="gray")
+        self.lbl_status.pack(side="bottom", pady=10)
+
+        start_btn = ttk.Button(self.btn_area, text="INICIAR NOVO JOGO", command=self.start_game)
+        start_btn.pack()
+
+    def update_screen_warning(self, player):
+        self.clear_buttons()
+        p_name = f"PLAYER {player['id']+1} ({player['color']})"
+        self.lbl_title.config(text=f"TURNO DO {p_name}")
+        self.lbl_instruction.config(
+            text=f"TODOS (menos {p_name}) VIREM DE COSTAS!\n\n{p_name}, quando estiver sozinho, pressione o botão no Hardware."
+        )
+
+    def update_screen_action(self):
+        p = self.players[self.current_player_idx]
+        role = p["role"]
+
+        self.lbl_title.config(text=f"VOCÊ É: {role}")
+
+        if role == "ASSASSINO":
+            self.lbl_instruction.config(text="Selecione quem você quer MATAR e depois aperte o botão físico.")
+            self.create_target_buttons("MATAR")
+        elif role == "DETETIVE":
+            self.lbl_instruction.config(text="Selecione quem você quer INVESTIGAR/PRENDER e depois aperte o botão físico.")
+            self.create_target_buttons("PRENDER")
+        elif role == "VÍTIMA":
+            self.lbl_instruction.config(text="Selecione quem você quer TESTEMUNHAR (Vigiar) e depois aperte o botão físico.")
+            self.create_target_buttons("VIGIAR")
+
+    def create_target_buttons(self, action_name):
+        self.clear_buttons()
+        # Cria botões para cada jogador vivo (exceto ele mesmo)
+        for p in self.players:
+            if p["alive"] and p["id"] != self.current_player_idx:
+                btn = ttk.Button(
+                    self.btn_area,
+                    text=f"{action_name} P{p['id']+1} ({p['color']})",
+                    command=lambda target=p["id"]: self.register_action(target),
+                )
+                btn.pack(side="left", padx=5)
+
+        # Botão de "Fazer nada"
+        ttk.Button(self.btn_area, text="Não fazer nada", command=lambda: self.register_action(None)).pack(side="left", padx=5)
+
+    def clear_buttons(self):
+        for widget in self.btn_area.winfo_children():
+            widget.destroy()
+
+    def register_action(self, target_id):
+        # Salva a ação
+        self.actions_tonight[self.current_player_idx] = target_id
+        msg = "Nenhuma ação selecionada." if target_id is None else f"Alvo selecionado: P{target_id+1}"
+        self.lbl_status.config(text=f"{msg} - AGORA APERTE O BOTÃO FÍSICO.")
+
+    # --- RESOLUÇÃO DA NOITE ---
+
+    def process_night_results(self):
+        self.lbl_title.config(text="PROCESSANDO A NOITE...")
+        self.lbl_instruction.config(text="Calculando mortes e prisões...")
+        self.clear_buttons()
+        self.root.update()
+        time.sleep(1)
+
+        assassin_id = -1
+        target_killed = -1
+        detective_id = -1
+        target_arrested = -1
+
+        # Identifica papéis
+        for p in self.players:
+            if p["role"] == "ASSASSINO":
+                assassin_id = p["id"]
+            if p["role"] == "DETETIVE":
+                detective_id = p["id"]
+
+        # Recupera ações
+        target_killed = self.actions_tonight.get(assassin_id)
+        target_arrested = self.actions_tonight.get(detective_id)
+
+        game_over = False
+        winner = ""
+
+        # 1. Detetive age
+        if target_arrested is not None:
+            if target_arrested == assassin_id:
+                game_over = True
+                winner = "DETETIVE (Prendeu o Assassino)"
+            elif self.players[target_arrested]["role"] != "ASSASSINO":
+                # Detetive errou, ele morre/é demitido
+                self.players[detective_id]["alive"] = False
+                self.send(f"LED{detective_id}=0")
+                self.witness_info[detective_id] = "Você prendeu um inocente e foi eliminado."
+
+        # 2. Assassino age (se não foi preso)
+        if not game_over and target_killed is not None:
+            if target_killed == detective_id:
+                # Se regra for: matar detetive ganha instantaneo
+                game_over = True
+                winner = "ASSASSINO (Matou o Detetive)"
+            else:
+                self.players[target_killed]["alive"] = False
+                self.send(f"LED{target_killed}=0")
+                self.witness_info[target_killed] = f"Você foi assassinado esta noite."
+                self.witness_info[assassin_id] = f"Você matou o Player {target_killed+1}."
+
+        # 3. Testemunhas
+        for p in self.players:
+            if p["role"] == "VÍTIMA" and p["alive"]:
+                target = self.actions_tonight.get(p["id"])
+                if target is not None:
+                    if target == assassin_id:
+                        self.witness_info[p["id"]] = f"VOCÊ VIU O P{assassin_id+1} SAINDO PARA MATAR!"
+                    elif target == target_killed:
+                        self.witness_info[p["id"]] = f"Você viu o P{target+1} sendo morto pelo P{assassin_id+1}!"
+
+        if game_over:
+            self.end_game(winner)
+        else:
+            # Verifica se assassino matou todo mundo
+            victims = [p for p in self.players if p["role"] == "VÍTIMA" and p["alive"]]
+            if not victims:
+                self.end_game("ASSASSINO (Todas vítimas mortas)")
+            else:
+                self.start_morning_reveal()
+
+    def end_game(self, winner):
+        self.send("DANCE")
+        self.lbl_title.config(text="FIM DE JOGO")
+        self.lbl_instruction.config(text=f"VENCEDOR: {winner}\n\nPressione o Botão para Reiniciar.")
+        self.game_phase = "GAME_OVER"
+        # Reset manual necessário depois
+
+    # --- MANHÃ ---
+
+    def start_morning_reveal(self):
+        self.send(f"LED{LED_BRANCO}=1")  # Amanheceu
+        self.turn_queue = [p for p in self.players]  # Todos veem o report, até mortos
+        self.next_reveal()
+
+    def next_reveal(self):
+        if len(self.turn_queue) == 0:
+            self.start_day_discussion()
+            return
+
+        player = self.turn_queue.pop(0)
+        self.current_player_idx = player["id"]
+
+        self.game_phase = "REVEAL_WARNING"
+        p_name = f"PLAYER {player['id']+1} ({player['color']})"
+        self.lbl_title.config(text=f"RELATÓRIO: {p_name}")
+        self.lbl_instruction.config(text=f"Apenas {p_name} deve olhar.\nOutros virem de costas.\n\nAperte o botão quando pronto.")
+        self.clear_buttons()
+
+    def update_screen_reveal_content(self):
+        idx = self.current_player_idx
+        info = self.witness_info[idx]
+        status = "VIVO" if self.players[idx]["alive"] else "MORTO"
+
+        self.lbl_title.config(text=f"VOCÊ ESTÁ: {status}")
+        self.lbl_instruction.config(text=f"{info}\n\nPressione o botão para o próximo.")
+
+    def start_day_discussion(self):
+        self.game_phase = "DAY"
+        self.lbl_title.config(text="O SOL NASCEU")
+        self.lbl_instruction.config(text="Discutam. Quem estiver com LED apagado morreu.\n\nQuando quiserem ir dormir, aperte o botão.")
 
 
-            if period % MINUTE == HALF_MINUTE:
-                send("LED4=0")
-                
-                
-
-        except:
-
-            pass
-        time.sleep(0.05)
-
-
-thread = threading.Thread(target=serial_reader, daemon=True)
-thread.start()
-
-
-root.mainloop()
+# =============================================================================
+# MAIN
+# =============================================================================
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = DetetiveGame(root)
+    root.mainloop()
