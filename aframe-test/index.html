@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFrame - Estabilidade Corrigida</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.2.0/dist/aframe-extras.min.js"></script>
+    <script src="./vertical-controls.js"></script>
+</head>
+
+<body>
+    <a-scene>
+        <a-assets>
+            <a-asset-item id="monitor-obj" src="./assets/monitor/HP_22es_Monitor N041125.obj"></a-asset-item>
+            <a-asset-item id="monitor-mtl" src="./assets/monitor/HP_22es_Monitor N041125.mtl"></a-asset-item>
+
+            <a-asset-item id="house-obj" src="./assets/house/European House N230925.obj"></a-asset-item>
+            <a-asset-item id="house-mtl" src="./assets/house/European House N230925.mtl"></a-asset-item>
+        </a-assets>
+
+        <a-entity obj-model="obj: #monitor-obj; mtl: #monitor-mtl" position="-6 0 -18" rotation="-90 0 0"
+            scale="0.1 0.1 0.1">
+        </a-entity>
+        <a-entity obj-model="obj: #house-obj; mtl: #house-mtl" position="0 -0.2 -15" rotation="-90 0 0"
+            scale="0.001 0.001 0.001">
+        </a-entity>
+        <a-plane position="0 0 -4" rotation="-90 0 0" width="40" height="40" src="./assets/house/6y22sx.png" shadow />
+        <a-plane position="0 7 2" rotation="0 0 0" width="10" height="10" color="#AAAAAA" shadow />
+
+        <a-entity id="rig" position="0 0 0" wasd-controls="acceleration: 100"> <a-entity camera look-controls
+                position="0 1.6 0">
+            </a-entity>
+        </a-entity>
+
+        <a-sky color="#66CCFF"></a-sky> <a-light type="directional" intensity="0.5" position="1 2 1"></a-light>
+        <a-light type="ambient" intensity="0.8"></a-light>
+
+    </a-scene>
+</body>
+
+</html>

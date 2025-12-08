@@ -1,0 +1,102 @@
+# 
+# Wavefront material file
+# Converted by the DEEP Exploration  Deep Exploration 6.3 x64 6.3.3.8069
+# Right Hemisphere, LTD
+# http://www.righthemisphere.com/
+# 
+
+newmtl Metal
+Ka 0.815686 0.815686 0.815686
+Kd 0.72549 0.72549 0.72549
+Ks 0.815686 0.815686 0.815686
+illum 2
+Ns 2048
+map_Kd 
+map_bump 
+bump 
+map_opacity 
+map_d 
+refl 
+map_kS 
+map_kA 
+map_Ns 
+
+newmtl Chrome
+Ka 0.635294 0.635294 0.635294
+Kd 0.72549 0.72549 0.72549
+Ks 1 1 1
+illum 2
+Ns 2048
+map_Kd 
+map_bump 
+bump 
+map_opacity 
+map_d 
+refl 
+map_kS 
+map_kA 
+map_Ns 
+
+newmtl Plastic_Blk
+Ka 0.451 0.451 0.451
+Kd 0.180392 0.180392 0.180392
+Ks 0.815686 0.815686 0.815686
+illum 2
+Ns 32
+map_Kd 
+map_bump 
+bump 
+map_opacity 
+map_d 
+refl 
+map_kS 
+map_kA 
+map_Ns 
+
+newmtl Display
+Ka 1 1 1
+Kd 1 1 1
+Ks 1 1 1
+illum 2
+Ns 2048
+map_Kd 5vvfgty7.png
+map_bump 
+bump 
+map_opacity 
+map_d 
+refl 
+map_kS 
+map_kA 
+map_Ns 
+
+newmtl Glass
+Ka 0.451 0.451 0.451
+Kd 0.451 0.451 0.451
+Ks 0.815686 0.815686 0.815686
+illum 2
+Ns 2048
+map_Kd 
+map_bump 
+bump 
+map_opacity 
+map_d 
+refl 
+map_kS 
+map_kA 
+map_Ns 
+
+newmtl Plastic_Blk_Logo
+Ka 0.451 0.451 0.451
+Kd 0.541176 0.541176 0.52549
+Ks 0.815686 0.815686 0.815686
+illum 2
+Ns 32
+map_Kd logo.png
+map_bump 
+bump 
+map_opacity 
+map_d 
+refl 
+map_kS 
+map_kA 
+map_Ns 
