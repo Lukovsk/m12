@@ -1,4 +1,5 @@
-import serial
+import random
+from serial import Serial
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -7,12 +8,23 @@ import time
 # ---------------------------
 # CONFIGURAÇÃO DA SERIAL
 # ---------------------------
-PORTA = "~/dev/ttyACM0"
-BAUD = 115200
+PORTA = "COM6"
+BAUD = 9600
 
-ser = serial.Serial(PORTA, BAUD, timeout=0.1)
+ser = Serial(PORTA, BAUD, timeout=0.1)
 time.sleep(2)  # Pico reinicia quando conecta
+MINUTE = 10
+HALF_MINUTE = MINUTE / 2
 
+root = tk.Tk()
+root.title("Controle do Raspberry Pi Pico W")
+led_states = [tk.IntVar() for _ in range(5)]
+LEDS = {}
+
+fRN = {0, 1, 2, 3}
+deads = [0, 0, 0, 0]
+period = 0
+witness = False
 
 # ---------------------------
 # FUNÇÃO PARA ENVIAR COMANDOS
@@ -20,20 +32,48 @@ time.sleep(2)  # Pico reinicia quando conecta
 def send(cmd):
     ser.write((cmd + "\n").encode())
 
+def setup():
+    send("ALL_OFF")
+
+    random.shuffle(fRN)
+
+def kill(target: int):
+    if (target == 1 or target == 3):
+        deads[3] = 1
+    else:
+        deads[target] = 1
+
+def secure(target: int):
+    if target == 3:
+        deads[3] = 1
+    else:
+        deads[1] = 1
+    
+def testify(target: int):
+    if target in [0, 2]:
+        witness = True
+
+def dance():
+    send("DANCE")
+
+def restart():
+    for i in range(4):
+        deads[i] = 0
+        fRN[i] = i
+    period = 0
+    witness = False
+    setup()
 
 # ---------------------------
 # GUI
 # ---------------------------
-root = tk.Tk()
-root.title("Controle do Raspberry Pi Pico W")
 
-led_states = [tk.IntVar() for _ in range(5)]
 
 frame_leds = ttk.LabelFrame(root, text="LEDs")
 frame_leds.pack(padx=10, pady=10, fill="x")
 
 for i in range(5):
-    cb = ttk.Checkbutton(frame_leds, text=f"LED {i}", variable=led_states[i], command=lambda i=i: send(f"LED{i}={led_states[i].get()}"))
+    cb = ttk.Checkbutton(frame_leds, text=f"LED {i+1}", variable=led_states[i], command=lambda i=i: send(f"LED{i}={led_states[i].get()}"))
     cb.pack(anchor="w")
 
 ttk.Button(root, text="Ligar TODOS", command=lambda: send("ALL_ON")).pack(fill="x", padx=10)
@@ -60,7 +100,22 @@ def serial_reader():
             if data:
                 log.insert("end", data + "\n")
                 log.see("end")
+
+                if data == "BUTTON_PRESSED":
+                    send("LED4=1")
+
+            time.sleep(0.2)
+            period += 1
+            print(period)
+
+
+            if period % MINUTE == HALF_MINUTE:
+                send("LED4=0")
+                
+                
+
         except:
+
             pass
         time.sleep(0.05)
 
