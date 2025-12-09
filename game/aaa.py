@@ -66,7 +66,7 @@ while True:
         
         
         if current == 1:
-            print("BUTTON_PRESSED")
+            # print("BUTTON_PRESSED")
             time.sleep(0.1)
 
     time.sleep(0.02)
