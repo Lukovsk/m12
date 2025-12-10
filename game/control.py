@@ -6,18 +6,13 @@ import time
 import random
 
 
-
-
-PORTA = "COM6"  
+PORTA = "COM6"
 BAUD = 9600
 
 
 ROLES_DEF = ["VÍTIMA", "DETETIVE", "VÍTIMA", "ASSASSINO"]
-CORES = ["AZUL", "AMARELO", "VERMELHO", "VERDE"]  
+CORES = ["AZUL", "AMARELO", "VERMELHO", "VERDE"]
 LED_BRANCO = 4
-
-
-
 
 
 class DetetiveGame:
@@ -26,10 +21,9 @@ class DetetiveGame:
         self.root.title("Detetive - Controle Master")
         self.root.geometry("600x500")
 
-        
         try:
             self.ser = serial.Serial(PORTA, BAUD, timeout=0.1)
-            time.sleep(2)  
+            time.sleep(2)
             self.send("ALL_ON")
             time.sleep(0.5)
             self.send("ALL_OFF")
@@ -39,24 +33,20 @@ class DetetiveGame:
             self.root.destroy()
             return
 
-        
-        self.players = []  
-        self.actions_tonight = {}  
-        self.turn_queue = []  
+        self.players = []
+        self.actions_tonight = {}
+        self.turn_queue = []
         self.current_player_idx = -1
-        self.game_phase = "SETUP"  
+        self.game_phase = "SETUP"
         self.witness_info = ["", "", "", ""]
         self.first_turn = True
 
-        
         self.setup_gui()
 
-        
         self.running = True
         self.thread = threading.Thread(target=self.serial_reader, daemon=True)
         self.thread.start()
 
-    
     def send(self, cmd):
         if self.ser and self.ser.is_open:
             self.ser.write((cmd + "\n").encode())
@@ -67,26 +57,24 @@ class DetetiveGame:
                 if self.ser and self.ser.is_open:
                     line = self.ser.readline().decode().strip()
                     if line == "BUTTON_PRESSED":
-                        
+
                         self.root.after(0, self.on_physical_button_pressed)
             except Exception as e:
                 print("Erro Serial:", e)
             time.sleep(0.05)
 
-    
-
     def start_game(self):
-        
+
         shuffled_roles = list(ROLES_DEF)
         random.shuffle(shuffled_roles)
 
         self.players = []
         for i in range(4):
             self.players.append({"id": i, "color": CORES[i], "role": shuffled_roles[i], "alive": True})
-            
+
             self.send(f"LED{i}=1")
 
-        self.send(f"LED{LED_BRANCO}=0")  
+        self.send(f"LED{LED_BRANCO}=0")
         self.lbl_status.config(text="JOGO INICIADO! A noite caiu.")
         self.start_night_phase()
 
@@ -94,7 +82,6 @@ class DetetiveGame:
         self.actions_tonight = {}
         self.witness_info = ["Nada aconteceu.", "Nada aconteceu.", "Nada aconteceu.", "Nada aconteceu."]
 
-        
         self.turn_queue = [p for p in self.players if p["alive"]]
         self.next_turn()
 
@@ -106,21 +93,18 @@ class DetetiveGame:
         player = self.turn_queue.pop(0)
         self.current_player_idx = player["id"]
 
-        
         self.game_phase = "WARNING"
         self.update_screen_warning(player)
 
     def on_physical_button_pressed(self):
-        
 
         if self.game_phase == "WARNING":
-            
+
             self.game_phase = "ACTION"
             self.update_screen_action()
 
         elif self.game_phase == "ACTION":
-            
-            
+
             self.next_turn()
 
         elif self.game_phase == "REVEAL_WARNING":
@@ -131,11 +115,9 @@ class DetetiveGame:
             self.next_reveal()
 
         elif self.game_phase == "DAY":
-            
-            self.send(f"LED{LED_BRANCO}=0")  
-            self.start_night_phase()
 
-    
+            self.send(f"LED{LED_BRANCO}=0")
+            self.start_night_phase()
 
     def setup_gui(self):
         style = ttk.Style()
@@ -189,7 +171,7 @@ class DetetiveGame:
 
     def create_target_buttons(self, action_name):
         self.clear_buttons()
-        
+
         for p in self.players:
             if p["alive"] and p["id"] != self.current_player_idx:
                 btn = ttk.Button(
@@ -199,7 +181,6 @@ class DetetiveGame:
                 )
                 btn.pack(side="left", padx=5)
 
-        
         ttk.Button(self.btn_area, text="Não fazer nada", command=lambda: self.register_action(None)).pack(side="left", padx=5)
 
     def clear_buttons(self):
@@ -207,12 +188,10 @@ class DetetiveGame:
             widget.destroy()
 
     def register_action(self, target_id):
-        
+
         self.actions_tonight[self.current_player_idx] = target_id
         msg = "Nenhuma ação selecionada." if target_id is None else f"Alvo selecionado: P{target_id+1}"
         self.lbl_status.config(text=f"{msg} - AGORA APERTE O BOTÃO FÍSICO.")
-
-    
 
     def process_night_results(self):
         self.lbl_title.config(text="PROCESSANDO A NOITE...")
@@ -227,35 +206,31 @@ class DetetiveGame:
         detective_id = -1
         target_arrested = -1
 
-        
         for p in self.players:
             if p["role"] == "ASSASSINO":
                 assassin_id = p["id"]
             if p["role"] == "DETETIVE":
                 detective_id = p["id"]
 
-        
         target_killed = self.actions_tonight.get(assassin_id)
         target_arrested = self.actions_tonight.get(detective_id)
 
         game_over = False
         winner = ""
 
-        
         if target_arrested is not None:
             if target_arrested == assassin_id:
                 game_over = True
                 winner = "DETETIVE (Prendeu o Assassino)"
             elif self.players[target_arrested]["role"] != "ASSASSINO":
-                
+
                 self.players[detective_id]["alive"] = False
                 self.send(f"LED{detective_id}=0")
                 self.witness_info[detective_id] = "Você prendeu um inocente e foi eliminado."
 
-        
         if not game_over and target_killed is not None:
             if target_killed == detective_id:
-                
+
                 game_over = True
                 winner = "ASSASSINO (Matou o Detetive)"
             else:
@@ -264,7 +239,6 @@ class DetetiveGame:
                 self.witness_info[target_killed] = f"Você foi assassinado esta noite."
                 self.witness_info[assassin_id] = f"Você matou o Player {target_killed+1}."
 
-        
         for p in self.players:
             if p["role"] == "VÍTIMA" and p["alive"]:
                 target = self.actions_tonight.get(p["id"])
@@ -277,7 +251,7 @@ class DetetiveGame:
         if game_over:
             self.end_game(winner)
         else:
-            
+
             victims = [p for p in self.players if p["role"] == "VÍTIMA" and p["alive"]]
             if not victims:
                 self.end_game("ASSASSINO (Todas vítimas mortas)")
@@ -289,13 +263,10 @@ class DetetiveGame:
         self.lbl_title.config(text="FIM DE JOGO")
         self.lbl_instruction.config(text=f"VENCEDOR: {winner}\n\nPressione o Botão para Reiniciar.")
         self.game_phase = "GAME_OVER"
-        
-
-    
 
     def start_morning_reveal(self):
-        self.send(f"LED{LED_BRANCO}=1")  
-        self.turn_queue = [p for p in self.players]  
+        self.send(f"LED{LED_BRANCO}=1")
+        self.turn_queue = [p for p in self.players]
         self.next_reveal()
 
     def next_reveal(self):
@@ -324,9 +295,6 @@ class DetetiveGame:
         self.game_phase = "DAY"
         self.lbl_title.config(text="O SOL NASCEU")
         self.lbl_instruction.config(text="Discutam. Quem estiver com LED apagado morreu.\n\nQuando quiserem ir dormir, aperte o botão.")
-
-
-
 
 
 if __name__ == "__main__":

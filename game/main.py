@@ -23,13 +23,10 @@ print("PICO ONLINE. Aguardando comandos...")
 # LOOP PRINCIPAL
 # ---------------------------
 while True:
-
-    # --- Lê comandos vindos do PC ---
     if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
         line = sys.stdin.readline().strip()
 
         if line.startswith("LED"):
-            # LED0, LED1, LED2...
             parts = line.split("=")
             led_id = int(parts[0].replace("LED", ""))
             state = int(parts[1])
@@ -53,21 +50,17 @@ while True:
                     time.sleep(0.1)
                     j.value(0)
                 l.value(0)
-            
 
         else:
             print("ERRO: comando desconhecido ->", line)
 
-    # --- Verifica botão ---
     current = button_pin.value()
-    
+
     if current != last_state:
         last_state = current
-        
-        
+
         if current == 1:
             print("BUTTON_PRESSED")
             time.sleep(0.1)
 
     time.sleep(0.02)
-
