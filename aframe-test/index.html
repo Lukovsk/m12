@@ -1,43 +1,104 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
-
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AFrame - Estabilidade Corrigida</title>
+    <title>Sala Imersiva com A-Frame</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.2.0/dist/aframe-extras.min.js"></script>
-    <script src="./vertical-controls.js"></script>
 </head>
-
 <body>
-    <a-scene>
-        <a-assets>
+    <script>
+        // Mantive seu componente de vídeo exatamente igual
+        AFRAME.registerComponent('troca-video', {
+            init: function () {
+                const videoListElement = document.getElementById('video-list');
+                const videoIds = videoListElement.getAttribute('data-videos').split(',');
+                this.videoIds = videoIds;
+                this.currentVideoIndex = 0;
+                this.videoElement = document.getElementById(this.videoIds[this.currentVideoIndex]);
+                const el = this.el;
+
+                if (this.videoElement) {
+                    this.videoElement.play().catch(e => console.warn("Autoplay bloqueado.", e));
+                }
+
+                el.addEventListener('click', () => {
+                    if (this.videoElement) this.videoElement.pause();
+                    this.currentVideoIndex = (this.currentVideoIndex + 1) % this.videoIds.length;
+                    const nextVideoId = this.videoIds[this.currentVideoIndex];
+                    this.videoElement = document.getElementById(nextVideoId);
+                    el.setAttribute('material', 'src', `#${nextVideoId}`);
+                    this.videoElement.play();
+                });
+
+                el.addEventListener('mouseenter', () => document.body.style.cursor = 'pointer');
+                el.addEventListener('mouseleave', () => document.body.style.cursor = 'default');
+            }
+        });
+    </script>
+
+    <a-scene shadow="type: pcfsoft"> <a-assets>
             <a-asset-item id="monitor-obj" src="./assets/monitor/HP_22es_Monitor N041125.obj"></a-asset-item>
             <a-asset-item id="monitor-mtl" src="./assets/monitor/HP_22es_Monitor N041125.mtl"></a-asset-item>
+            
+            <a-asset-item id="sofa-obj" src="./assets/sofa/Fauborg Sofa N021025.obj"></a-asset-item>
+            <a-asset-item id="sofa-mtl" src="./assets/sofa/Fauborg Sofa N021025.mtl"></a-asset-item>
 
-            <a-asset-item id="house-obj" src="./assets/house/European House N230925.obj"></a-asset-item>
-            <a-asset-item id="house-mtl" src="./assets/house/European House N230925.mtl"></a-asset-item>
+            <a-asset-item id="rack-obj" src="./assets/rack/Ider Kanyon Tv Unit N041125.obj"></a-asset-item>
+            <a-asset-item id="rack-mtl" src="./assets/rack/Ider Kanyon Tv Unit N041125.mtl"></a-asset-item>
+
+            <video id="video1" autoplay loop muted="true" src="./assets/videos/v1.mp4"></video>
+            <video id="video2" autoplay loop muted="true" src="./assets/videos/v2.mp4"></video>
+            <video id="video3" autoplay loop muted="true" src="./assets/videos/v3.mp4"></video>
+            <span id="video-list" data-videos="video1,video2,video3"></span>
+            
+            <img id="floor-texture" src="https://cdn.aframe.io/a-painter/images/floor.jpg">
         </a-assets>
 
-        <a-entity obj-model="obj: #monitor-obj; mtl: #monitor-mtl" position="-6 0 -18" rotation="-90 0 0"
-            scale="0.1 0.1 0.1">
-        </a-entity>
-        <a-entity obj-model="obj: #house-obj; mtl: #house-mtl" position="0 -0.2 -15" rotation="-90 0 0"
-            scale="0.001 0.001 0.001">
-        </a-entity>
-        <a-plane position="0 0 -4" rotation="-90 0 0" width="40" height="40" src="./assets/house/6y22sx.png" shadow />
-        <a-plane position="0 7 2" rotation="0 0 0" width="10" height="10" color="#AAAAAA" shadow />
+        <a-plane position="0 0 -20" rotation="-90 0 0" width="60" height="60" 
+                 src="#floor-texture" repeat="10 10" color="#AAA" shadow="receive: true">
+        </a-plane>
 
-        <a-entity id="rig" position="0 0 0" wasd-controls="acceleration: 100"> <a-entity camera look-controls
-                position="0 1.6 0">
-            </a-entity>
+        <a-plane position="0 10 -20" rotation="90 0 0" width="60" height="60" 
+                 color="#EEE" shadow="receive: true">
+        </a-plane>
+
+        <a-plane position="-15 5 -20" rotation="0 90 0" width="60" height="20" color="#DDD"></a-plane> <a-plane position="15 5 -20" rotation="0 -90 0" width="60" height="20" color="#DDD"></a-plane> <a-plane position="0 5 -40" rotation="0 0 0" width="40" height="20" color="#CCC"></a-plane>    <a-entity obj-model="obj: #rack-obj; mtl: #rack-mtl" 
+                  position="0 0.1 -24" 
+                  rotation="-90 90 0"
+                  scale="10 10 10"
+                  shadow="cast: true">
         </a-entity>
 
-        <a-sky color="#66CCFF"></a-sky> <a-light type="directional" intensity="0.5" position="1 2 1"></a-light>
-        <a-light type="ambient" intensity="0.8"></a-light>
+        <a-entity id="monitor-frame" obj-model="obj: #monitor-obj; mtl: #monitor-mtl" 
+                  position="-6 1.5 -24" 
+                  rotation="-90 0 0" 
+                  scale="0.1 0.1 0.1"
+                  shadow="cast: true">
+            <a-plane id="tv-screen" 
+                     geometry="primitive: plane; width: 47.5; height: 27" 
+                     material="src: #video1; shader: flat"
+                     position="57.6 1.4 24" 
+                     rotation="90 0 0" 
+                     troca-video>
+            </a-plane>
+        </a-entity>
+
+        <a-entity obj-model="obj: #sofa-obj; mtl: #sofa-mtl" 
+                  position="0 0.1 -18" 
+                  rotation="-90 90 0" 
+                  scale="0.04 0.04 0.04"
+                  shadow="cast: true">
+        </a-entity>
+
+        <a-light type="ambient" color="#CCC" intensity="0.4"></a-light>
+        
+        <a-light type="directional" position="-2 4 2" intensity="0.5" cast-shadow="true"></a-light>
+
+        <a-light type="point" position="0 3 -20" color="#FFD" intensity="0.6" distance="20" decay="2"></a-light>
+
+        <a-entity camera look-controls wasd-controls position="0 2 -15">
+            <a-cursor color="yellow"></a-cursor>
+        </a-entity>
 
     </a-scene>
 </body>
-
 </html>
